@@ -1,87 +1,94 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 from joblib import load
 
-st.set_page_config(page_title="Despliegue del Modelo", page_icon="🚀", layout="centered")
-st.title("Predicción con Nuevos Datos")
-st.write("Esta aplicación utiliza un `Pipeline` completo de `scikit-learn` cargado desde un archivo `joblib`.")
+# Configuramos la página y aspecto general
+st.set_page_config(page_title="Predictor de Clientes Bancarios", page_icon="🏦", layout="wide")
+st.title("Herramienta de Predicción de Suscripciones")
+st.info("Sistema de Machine Learning para clasificar si un cliente contratará el producto bancario.")
 
 @st.cache_resource
-def load_pack():
+def inicializar_modelo():
     return load("modelo_produccion.joblib")
 
 try:
-    pack = load_pack()
-except Exception as e:
-    st.error(f"Error al cargar el modelo: {e}")
+    diccionario_modelo = inicializar_modelo()
+except Exception as error_carga:
+    st.error(f"Hubo un problema al cargar el archivo del modelo: {error_carga}")
     st.stop()
 
-pipeline = pack["pipeline"]
-feature_metadata = pack["feature_metadata"]
-classes_ = pack.get("classes_", [])
+# Extraemos los datos del paquete
+modelo_pipeline = diccionario_modelo["pipeline"]
+info_variables = diccionario_modelo["feature_metadata"]
+clases_modelo = diccionario_modelo.get("classes_", [])
 
-st.markdown("### Introduce los valores de las variables:")
+st.write("---")
+st.subheader("📋 Introduce el perfil del nuevo cliente:")
 
-# Usamos un formulario para evitar recalcular la predicción con cada pulsación
-with st.form("prediction_form"):
-    inputs = {}
+# Formulario 
+with st.form("formulario_cliente"):
+    entradas_usuario = {}
     
-    # Renderizamos las variables numéricas
-    st.subheader("Variables Numéricas")
-    num_cols = st.columns(2)
-    num_idx = 0
+    st.markdown("**Datos Cuantitativos (Numéricos)**")
+    columnas_num = st.columns(3) 
+    indice_num = 0
     
-    for feat, meta in feature_metadata.items():
-        if meta["type"] == "numerical":
-            with num_cols[num_idx % 2]:
-                med = float(meta.get("median", 0.0))
-                # Usamos number_input para entradas numéricas
-                inputs[feat] = st.number_input(
-                    label=feat,
-                    min_value=float(meta.get("min", -1e9)),
-                    max_value=float(meta.get("max", 1e9)),
-                    value=med,
-                    step=1.0 if med.is_integer() else 0.1
+    for nombre_var, detalles in info_variables.items():
+        if detalles["type"] == "numerical":
+            with columnas_num[indice_num % 3]:
+                valor_medio = float(detalles.get("median", 0.0))
+                entradas_usuario[nombre_var] = st.number_input(
+                    label=nombre_var.capitalize(), # Ponemos la primera letra en mayúscula
+                    min_value=float(detalles.get("min", -1e9)),
+                    max_value=float(detalles.get("max", 1e9)),
+                    value=valor_medio,
+                    step=1.0 if valor_medio.is_integer() else 0.1
                 )
-            num_idx += 1
+            indice_num += 1
             
-    # Renderizamos las variables categóricas
-    st.subheader("Variables Categóricas")
-    cat_cols = st.columns(2)
-    cat_idx = 0
+    st.markdown("<br>**Datos Cualitativos (Categóricos)**", unsafe_allow_html=True)
+    columnas_cat = st.columns(3)
+    indice_cat = 0
     
-    for feat, meta in feature_metadata.items():
-        if meta["type"] == "categorical":
-            with cat_cols[cat_idx % 2]:
-                opts = meta.get("options", [])
-                inputs[feat] = st.selectbox(
-                    label=feat,
-                    options=opts,
-                    index=0 if opts else None
+    for nombre_var, detalles in info_variables.items():
+        if detalles["type"] == "categorical":
+            with columnas_cat[indice_cat % 3]:
+                opciones = detalles.get("options", [])
+                entradas_usuario[nombre_var] = st.selectbox(
+                    label=nombre_var.capitalize(),
+                    options=opciones,
+                    index=0 if opciones else None
                 )
-            cat_idx += 1
+            indice_cat += 1
             
-    st.markdown("---")
-    submitted = st.form_submit_button("Predecir", use_container_width=True)
+    st.write("") # Espacio en blanco
+    
+    # Botón principal
+    boton_enviar = st.form_submit_button("Lanzar Predicción", type="primary", use_container_width=True)
 
-if submitted:
-    # Convertimos las entradas en un DataFrame de una única fila
-    X_new = pd.DataFrame([inputs])
+if boton_enviar:
+    df_nuevo_cliente = pd.DataFrame([entradas_usuario])
     
     try:
-        # Predecimos usando el Pipeline (que ya incorpora todo el preprocesamiento)
-        proba = pipeline.predict_proba(X_new)[0]
-        y_pred = pipeline.predict(X_new)[0]
+        # Hacemos la predicción principal
+        prediccion_final = modelo_pipeline.predict(df_nuevo_cliente)[0]
         
-        st.success(f"### Predicción: **{y_pred}**")
+        # Mostramos un mensaje con el resultado
+        if str(prediccion_final).lower() in ["yes", "1", "sí", "si"]:
+            st.success(f"🎯 **Resultado:** El cliente **SÍ** parece propenso a suscribirse (Clase predicha: {prediccion_final})")
+        else:
+            st.warning(f"🛑 **Resultado:** El cliente **NO** parece propenso a suscribirse (Clase predicha: {prediccion_final})")
         
-        st.markdown("#### Probabilidades de la Predicción:")
-        
-        # Mostramos los resultados como métricas destacadas
-        cols = st.columns(len(classes_))
-        for i, (cls, p) in enumerate(zip(classes_, proba)):
-            cols[i].metric(label=f"Clase {cls}", value=f"{p*100:.1f}%")
+        try:
+            probabilidades = modelo_pipeline.predict_proba(df_nuevo_cliente)[0]
+            st.markdown("#### Nivel de Confianza:")
             
-    except Exception as e:
-        st.error(f"Error durante la predicción: {e}")
+            cols_metricas = st.columns(len(clases_modelo))
+            for idx, (clase, prob) in enumerate(zip(clases_modelo, probabilidades)):
+                cols_metricas[idx].metric(label=f"Clase '{clase}'", value=f"{prob*100:.1f}%")
+        except Exception:
+            # Por si el modelo dice tener 'predict_proba' pero falla internamente
+            st.info("💡 El modelo configurado ofrece clasificación directa.")
+            
+    except Exception as error_pred:
+        st.error(f"Algo falló al intentar realizar la predicción: {error_pred}")
