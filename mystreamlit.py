@@ -9,18 +9,35 @@ st.info("Sistema de Machine Learning para clasificar si un cliente contratará e
 
 @st.cache_resource
 def inicializar_modelo():
-    return load("modelo_produccion.joblib")
+    return load("modelo_final.joblib")
 
 try:
-    diccionario_modelo = inicializar_modelo()
+    modelo_pipeline = inicializar_modelo()
 except Exception as error_carga:
     st.error(f"Hubo un problema al cargar el archivo del modelo: {error_carga}")
     st.stop()
 
-# Extraemos los datos del paquete
-modelo_pipeline = diccionario_modelo["pipeline"]
-info_variables = diccionario_modelo["feature_metadata"]
-clases_modelo = diccionario_modelo.get("classes_", [])
+info_variables = {
+    "age": {"type": "numerical", "min": 18, "max": 100, "median": 35},
+    "balance": {"type": "numerical", "min": -8000, "max": 100000, "median": 500},
+    "day": {"type": "numerical", "min": 1, "max": 31, "median": 15},
+    "duration": {"type": "numerical", "min": 0, "max": 5000, "median": 150},
+    "campaign": {"type": "numerical", "min": 1, "max": 50, "median": 1},
+    "pdays": {"type": "numerical", "min": -1, "max": 900, "median": -1},
+    "previous": {"type": "numerical", "min": 0, "max": 300, "median": 0},
+    "job": {"type": "categorical", "options": ['admin.', 'blue-collar', 'entrepreneur', 'housemaid', 'management', 'retired', 'self-employed', 'services', 'student', 'technician', 'unemployed', 'unknown']},
+    "marital": {"type": "categorical", "options": ['divorced', 'married', 'single']},
+    "education": {"type": "categorical", "options": ['primary', 'secondary', 'tertiary', 'unknown']},
+    "default": {"type": "categorical", "options": ['no', 'yes']},
+    "housing": {"type": "categorical", "options": ['no', 'yes']},
+    "loan": {"type": "categorical", "options": ['no', 'yes']},
+    "contact": {"type": "categorical", "options": ['cellular', 'telephone', 'unknown']},
+    "month": {"type": "categorical", "options": ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']},
+    "poutcome": {"type": "categorical", "options": ['failure', 'other', 'success', 'unknown']}
+}
+
+# Extraemos las clases del modelo cargado
+clases_modelo = modelo_pipeline.classes_.tolist()
 
 st.write("---")
 st.subheader("📋 Introduce el perfil del nuevo cliente:")
